@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   form: "lab_portal_manual_form",
   scanForm: "lab_portal_scan_form",
   extractedData: "lab_portal_extracted_data",
+  employees: "lab_portal_employees",
 };
 
 const HOSPITAL_NAME = "King Salman Armed Forces Hospital";
@@ -41,20 +42,33 @@ const defaultResults = [
   },
 ];
 
-const users = {
-  lab: {
-    username: "lab",
+const fixedUsers = {
+  admin: {
+    username: "admin",
     password: "1234",
-    role: "Lab",
-    name: "Laboratory Staff",
+    role: "Admin",
+    name: "System Administrator",
+    active: true,
   },
   doctor: {
     username: "doctor",
     password: "1234",
     role: "Doctor",
     name: "Duty Doctor",
+    active: true,
   },
 };
+
+const defaultEmployees = [
+  {
+    id: 1,
+    username: "lab",
+    password: "1234",
+    role: "Lab",
+    name: "Laboratory Staff",
+    active: true,
+  },
+];
 
 const defaultManualForm = {
   barcode: "",
@@ -131,6 +145,15 @@ export default function App() {
   const [extractedData, setExtractedData] = useState(() =>
     safeRead(STORAGE_KEYS.extractedData, null)
   );
+  const [employees, setEmployees] = useState(() =>
+    safeRead(STORAGE_KEYS.employees, defaultEmployees)
+  );
+  const [employeeForm, setEmployeeForm] = useState({
+    name: "",
+    username: "",
+    password: "",
+  });
+
   const importInputRef = useRef(null);
 
   useEffect(() => {
@@ -158,6 +181,10 @@ export default function App() {
   }, [session]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.employees, JSON.stringify(employees));
+  }, [employees]);
+
+  useEffect(() => {
     if (session?.role === "Lab") {
       setForm((prev) => ({
         ...prev,
@@ -173,15 +200,37 @@ export default function App() {
 
   function handleLogin(e) {
     e.preventDefault();
-    const username = loginForm.username.trim().toLowerCase();
-    const user = users[username];
 
-    if (!user || user.password !== loginForm.password) {
+    const username = loginForm.username.trim().toLowerCase();
+    const password = loginForm.password;
+
+    const fixedUser = fixedUsers[username];
+
+    if (fixedUser) {
+      if (!fixedUser.active || fixedUser.password !== password) {
+        setLoginError("Invalid username or password");
+        return;
+      }
+
+      setSession(fixedUser);
+      setLoginError("");
+      setSearch("");
+      return;
+    }
+
+    const employee = employees.find(
+      (emp) =>
+        emp.username.toLowerCase() === username &&
+        emp.password === password &&
+        emp.active
+    );
+
+    if (!employee) {
       setLoginError("Invalid username or password");
       return;
     }
 
-    setSession(user);
+    setSession(employee);
     setLoginError("");
     setSearch("");
   }
@@ -206,6 +255,7 @@ export default function App() {
     localStorage.removeItem(STORAGE_KEYS.scanForm);
     localStorage.removeItem(STORAGE_KEYS.extractedData);
     localStorage.removeItem(STORAGE_KEYS.session);
+    localStorage.removeItem(STORAGE_KEYS.employees);
 
     setResults(defaultResults);
     setEntryMode("manual");
@@ -218,6 +268,8 @@ export default function App() {
       technician: session?.role === "Lab" ? session.name : "",
     });
     setExtractedData(null);
+    setEmployees(defaultEmployees);
+    setEmployeeForm({ name: "", username: "", password: "" });
     setSearch("");
   }
 
@@ -613,12 +665,101 @@ export default function App() {
     reportWindow.print();
   }
 
+  function handleAddEmployee(e) {
+    e.preventDefault();
+
+    if (session?.role !== "Admin") return;
+
+    const name = employeeForm.name.trim();
+    const username = employeeForm.username.trim().toLowerCase();
+    const password = employeeForm.password.trim();
+
+    if (!name || !username || !password) {
+      alert("Please fill all employee fields");
+      return;
+    }
+
+    const usernameExistsInFixedUsers = !!fixedUsers[username];
+    const usernameExistsInEmployees = employees.some(
+      (emp) => emp.username.toLowerCase() === username
+    );
+
+    if (usernameExistsInFixedUsers || usernameExistsInEmployees) {
+      alert("Username already exists");
+      return;
+    }
+
+    const newEmployee = {
+      id: Date.now(),
+      name,
+      username,
+      password,
+      role: "Lab",
+      active: true,
+    };
+
+    setEmployees((prev) => [...prev, newEmployee]);
+    setEmployeeForm({ name: "", username: "", password: "" });
+  }
+
+  function handleToggleEmployee(id) {
+    if (session?.role !== "Admin") return;
+
+    setEmployees((prev) =>
+      prev.map((emp) =>
+        emp.id === id ? { ...emp, active: !emp.active } : emp
+      )
+    );
+  }
+
+  function handleDeleteEmployee(id) {
+    if (session?.role !== "Admin") return;
+
+    const ok = window.confirm("Delete this employee?");
+    if (!ok) return;
+
+    setEmployees((prev) => prev.filter((emp) => emp.id !== id));
+  }
+
+  function handleResetEmployeePassword(id) {
+    if (session?.role !== "Admin") return;
+
+    const newPassword = window.prompt("Enter new password:");
+    if (!newPassword) return;
+
+    setEmployees((prev) =>
+      prev.map((emp) =>
+        emp.id === id ? { ...emp, password: newPassword } : emp
+      )
+    );
+  }
+
   const filteredResults = useMemo(() => {
     const q = search.toLowerCase().trim();
 
     if (session?.role === "Doctor") {
       if (!q) return [];
       return results.filter((item) => item.mrn.toLowerCase().includes(q));
+    }
+
+    if (session?.role === "Admin") {
+      if (!q) return results;
+
+      return results.filter((item) =>
+        [
+          item.barcode,
+          item.mrn,
+          item.patient,
+          item.test,
+          item.result,
+          item.status,
+          item.technician,
+          item.source,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
+      );
     }
 
     if (!q) return results;
@@ -696,8 +837,9 @@ export default function App() {
 
           <div style={demoBoxStyle}>
             <div style={{ fontWeight: "bold", marginBottom: 8 }}>Demo Accounts</div>
-            <div>Lab: <strong>lab</strong> / 1234</div>
+            <div>Admin: <strong>admin</strong> / 1234</div>
             <div>Doctor: <strong>doctor</strong> / 1234</div>
+            <div>Lab: <strong>lab</strong> / 1234</div>
           </div>
 
           <form onSubmit={handleLogin}>
@@ -707,7 +849,7 @@ export default function App() {
                 value={loginForm.username}
                 onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
                 style={inputStyle}
-                placeholder="lab or doctor"
+                placeholder="admin, doctor, or lab"
               />
             </div>
 
@@ -784,10 +926,126 @@ export default function App() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: session.role === "Lab" ? "1.2fr 2fr" : "1fr",
+            gridTemplateColumns:
+              session.role === "Lab" || session.role === "Admin" ? "1.2fr 2fr" : "1fr",
             gap: "24px",
           }}
         >
+          {session.role === "Admin" && (
+            <div style={panelStyle}>
+              <h2 style={{ marginTop: 0 }}>Admin Panel</h2>
+              <p style={{ color: "#64748b" }}>
+                Manage laboratory staff accounts and access permissions.
+              </p>
+
+              <form onSubmit={handleAddEmployee}>
+                <div style={{ marginBottom: "12px" }}>
+                  <label>Employee Name</label>
+                  <input
+                    value={employeeForm.name}
+                    onChange={(e) =>
+                      setEmployeeForm({ ...employeeForm, name: e.target.value })
+                    }
+                    style={inputStyle}
+                    placeholder="Employee full name"
+                  />
+                </div>
+
+                <div style={{ marginBottom: "12px" }}>
+                  <label>Username</label>
+                  <input
+                    value={employeeForm.username}
+                    onChange={(e) =>
+                      setEmployeeForm({ ...employeeForm, username: e.target.value })
+                    }
+                    style={inputStyle}
+                    placeholder="Username"
+                  />
+                </div>
+
+                <div style={{ marginBottom: "16px" }}>
+                  <label>Password</label>
+                  <input
+                    value={employeeForm.password}
+                    onChange={(e) =>
+                      setEmployeeForm({ ...employeeForm, password: e.target.value })
+                    }
+                    style={inputStyle}
+                    placeholder="Password"
+                  />
+                </div>
+
+                <button type="submit" style={buttonStyleInline}>
+                  Add Employee
+                </button>
+              </form>
+
+              <div style={{ marginTop: 24 }}>
+                <h3>Lab Employees</h3>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc" }}>
+                        <th style={thStyle}>Name</th>
+                        <th style={thStyle}>Username</th>
+                        <th style={thStyle}>Role</th>
+                        <th style={thStyle}>Status</th>
+                        <th style={thStyle}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {employees.map((emp) => (
+                        <tr key={emp.id}>
+                          <td style={tdStyle}>{emp.name}</td>
+                          <td style={tdStyle}>{emp.username}</td>
+                          <td style={tdStyle}>{emp.role}</td>
+                          <td style={tdStyle}>
+                            <span
+                              style={{
+                                ...syncBadgeStyle(emp.active),
+                                borderRadius: "999px",
+                                padding: "6px 12px",
+                                fontSize: "12px",
+                                fontWeight: "bold",
+                                display: "inline-block",
+                              }}
+                            >
+                              {emp.active ? "Active" : "Disabled"}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              <button
+                                style={smallButtonBlue}
+                                onClick={() => handleToggleEmployee(emp.id)}
+                              >
+                                {emp.active ? "Disable" : "Enable"}
+                              </button>
+
+                              <button
+                                style={smallButtonPurple}
+                                onClick={() => handleResetEmployeePassword(emp.id)}
+                              >
+                                Reset Password
+                              </button>
+
+                              <button
+                                style={smallButtonOrange}
+                                onClick={() => handleDeleteEmployee(emp.id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {session.role === "Lab" && (
             <div style={panelStyle}>
               <h2 style={{ marginTop: 0 }}>Lab Entry</h2>
@@ -1110,11 +1368,17 @@ export default function App() {
             >
               <div>
                 <h2 style={{ marginTop: 0, marginBottom: "6px" }}>
-                  {session.role === "Doctor" ? "Doctor Portal" : "Doctor View"}
+                  {session.role === "Doctor"
+                    ? "Doctor Portal"
+                    : session.role === "Admin"
+                    ? "System Overview"
+                    : "Doctor View"}
                 </h2>
                 <p style={{ color: "#64748b", margin: 0 }}>
                   {session.role === "Doctor"
                     ? "Search by patient MRN to view results"
+                    : session.role === "Admin"
+                    ? "Review all downtime results and account activity"
                     : "Search temporary results during LIS downtime"}
                 </p>
               </div>
