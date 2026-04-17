@@ -183,6 +183,7 @@ export default function App() {
 
     setSession(user);
     setLoginError("");
+    setSearch("");
   }
 
   function handleLogout() {
@@ -614,6 +615,12 @@ export default function App() {
 
   const filteredResults = useMemo(() => {
     const q = search.toLowerCase().trim();
+
+    if (session?.role === "Doctor") {
+      if (!q) return [];
+      return results.filter((item) => item.mrn.toLowerCase().includes(q));
+    }
+
     if (!q) return results;
 
     return results.filter((item) =>
@@ -631,7 +638,7 @@ export default function App() {
         .toLowerCase()
         .includes(q)
     );
-  }, [results, search]);
+  }, [results, search, session]);
 
   const criticalCount = results.filter((r) => r.status === "Critical").length;
   const pendingSyncCount = results.filter((r) => !r.synced).length;
@@ -1106,7 +1113,9 @@ export default function App() {
                   {session.role === "Doctor" ? "Doctor Portal" : "Doctor View"}
                 </h2>
                 <p style={{ color: "#64748b", margin: 0 }}>
-                  Search temporary results during LIS downtime
+                  {session.role === "Doctor"
+                    ? "Search by patient MRN to view results"
+                    : "Search temporary results during LIS downtime"}
                 </p>
               </div>
 
@@ -1114,7 +1123,11 @@ export default function App() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={{ ...inputStyle, width: "280px", marginBottom: 0 }}
-                placeholder="Search by barcode, MRN, patient..."
+                placeholder={
+                  session?.role === "Doctor"
+                    ? "Search by patient MRN only..."
+                    : "Search by barcode, MRN, patient..."
+                }
               />
             </div>
 
@@ -1163,81 +1176,117 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: "#f8fafc" }}>
-                    <th style={thStyle}>Barcode</th>
-                    <th style={thStyle}>MRN</th>
-                    <th style={thStyle}>Patient</th>
-                    <th style={thStyle}>Test</th>
-                    <th style={thStyle}>Result</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={thStyle}>Sync</th>
-                    <th style={thStyle}>Source</th>
-                    <th style={thStyle}>Time</th>
-                    <th style={thStyle}>Technician</th>
-                    <th style={thStyle}>Note</th>
-                    <th style={thStyle}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredResults.map((item, index) => (
-                    <tr key={index}>
-                      <td style={tdStyle}>{item.barcode}</td>
-                      <td style={tdStyle}>{item.mrn}</td>
-                      <td style={tdStyle}>{item.patient}</td>
-                      <td style={tdStyle}>{item.test}</td>
-                      <td style={tdStyle}>{item.result}</td>
-                      <td style={tdStyle}>
-                        <span
-                          style={{
-                            ...badgeStyle(item.status),
-                            borderRadius: "999px",
-                            padding: "6px 12px",
-                            fontSize: "12px",
-                            fontWeight: "bold",
-                            display: "inline-block",
-                          }}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <span
-                          style={{
-                            ...syncBadgeStyle(item.synced),
-                            borderRadius: "999px",
-                            padding: "6px 12px",
-                            fontSize: "12px",
-                            fontWeight: "bold",
-                            display: "inline-block",
-                          }}
-                        >
-                          {item.synced ? "Synced" : "Pending"}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>{item.source}</td>
-                      <td style={tdStyle}>{item.time}</td>
-                      <td style={tdStyle}>{item.technician}</td>
-                      <td style={tdStyle}>{item.note}</td>
-                      <td style={tdStyle}>
-                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                          {session.role === "Lab" && !item.synced && (
-                            <button style={smallButtonBlue} onClick={() => handleSync(index)}>
-                              Sync to LIS
-                            </button>
-                          )}
-                          <button style={smallButtonGray} onClick={() => handlePrint(item)}>
-                            Print
-                          </button>
-                        </div>
-                      </td>
+            {session?.role === "Doctor" && !search.trim() && (
+              <div
+                style={{
+                  marginTop: "8px",
+                  marginBottom: "16px",
+                  background: "#fff7ed",
+                  border: "1px solid #fed7aa",
+                  borderRadius: "16px",
+                  padding: "16px",
+                  color: "#9a3412",
+                  fontWeight: "bold",
+                }}
+              >
+                Please enter the patient MRN to view results.
+              </div>
+            )}
+
+            {session?.role === "Doctor" && search.trim() && filteredResults.length === 0 && (
+              <div
+                style={{
+                  marginTop: "8px",
+                  marginBottom: "16px",
+                  background: "#f8fafc",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "16px",
+                  padding: "16px",
+                  color: "#475569",
+                  fontWeight: "bold",
+                }}
+              >
+                No results found for this MRN.
+              </div>
+            )}
+
+            {session?.role === "Doctor" && !search.trim() ? null : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: "#f8fafc" }}>
+                      <th style={thStyle}>Barcode</th>
+                      <th style={thStyle}>MRN</th>
+                      <th style={thStyle}>Patient</th>
+                      <th style={thStyle}>Test</th>
+                      <th style={thStyle}>Result</th>
+                      <th style={thStyle}>Status</th>
+                      <th style={thStyle}>Sync</th>
+                      <th style={thStyle}>Source</th>
+                      <th style={thStyle}>Time</th>
+                      <th style={thStyle}>Technician</th>
+                      <th style={thStyle}>Note</th>
+                      <th style={thStyle}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredResults.map((item, index) => (
+                      <tr key={index}>
+                        <td style={tdStyle}>{item.barcode}</td>
+                        <td style={tdStyle}>{item.mrn}</td>
+                        <td style={tdStyle}>{item.patient}</td>
+                        <td style={tdStyle}>{item.test}</td>
+                        <td style={tdStyle}>{item.result}</td>
+                        <td style={tdStyle}>
+                          <span
+                            style={{
+                              ...badgeStyle(item.status),
+                              borderRadius: "999px",
+                              padding: "6px 12px",
+                              fontSize: "12px",
+                              fontWeight: "bold",
+                              display: "inline-block",
+                            }}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span
+                            style={{
+                              ...syncBadgeStyle(item.synced),
+                              borderRadius: "999px",
+                              padding: "6px 12px",
+                              fontSize: "12px",
+                              fontWeight: "bold",
+                              display: "inline-block",
+                            }}
+                          >
+                            {item.synced ? "Synced" : "Pending"}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>{item.source}</td>
+                        <td style={tdStyle}>{item.time}</td>
+                        <td style={tdStyle}>{item.technician}</td>
+                        <td style={tdStyle}>{item.note}</td>
+                        <td style={tdStyle}>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            {session.role === "Lab" && !item.synced && (
+                              <button style={smallButtonBlue} onClick={() => handleSync(index)}>
+                                Sync to LIS
+                              </button>
+                            )}
+                            <button style={smallButtonGray} onClick={() => handlePrint(item)}>
+                              Print
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <div style={aiNoteStyle}>
               <strong>AI Safety Layer:</strong> results and downtime work are saved locally in the browser,
