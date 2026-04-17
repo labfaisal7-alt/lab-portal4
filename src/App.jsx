@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
 };
 
 const HOSPITAL_NAME = "King Salman Armed Forces Hospital";
+const SYSTEM_NAME = "Zero Downtime Lab Portal";
 
 const defaultResults = [
   {
@@ -341,7 +342,7 @@ export default function App() {
         }
 
         alert(`Imported ${validRows.length} result(s) successfully.`);
-      } catch (error) {
+      } catch {
         alert("Failed to import CSV file");
       } finally {
         if (importInputRef.current) {
@@ -403,11 +404,9 @@ export default function App() {
         alert("Please fill all CBC fields");
         return;
       }
-    } else {
-      if (!form.result) {
-        alert("Please enter the result");
-        return;
-      }
+    } else if (!form.result) {
+      alert("Please enter the result");
+      return;
     }
 
     const status = getStatus(form.test, form.result, form.cbc);
@@ -569,21 +568,29 @@ export default function App() {
     reportWindow.document.write(`
       <html>
         <head>
-          <title>Temporary Lab Report</title>
+          <title>${SYSTEM_NAME}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 30px; }
-            h1 { margin-bottom: 10px; }
-            h2 { margin-top: 0; color: #0f172a; }
-            .hospital { color: #334155; margin-bottom: 20px; }
-            .box { border: 1px solid #ccc; border-radius: 12px; padding: 20px; margin-top: 20px; }
-            .label { color: #555; font-weight: bold; }
+            body { font-family: Arial, sans-serif; padding: 30px; color: #0f172a; }
+            h1 { margin: 0 0 8px 0; font-size: 26px; }
+            h2 { margin: 0; font-size: 16px; color: #475569; }
+            .top { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+            .logo { width: 160px; max-height: 72px; object-fit: contain; }
+            .box { border: 1px solid #cbd5e1; border-radius: 16px; padding: 20px; margin-top: 20px; }
+            .label { color: #475569; font-weight: bold; }
             .note { margin-top: 20px; color: #b45309; }
           </style>
         </head>
         <body>
-          <h2>${HOSPITAL_NAME}</h2>
-          <div class="hospital">Temporary Downtime Lab Report</div>
+          <div class="top">
+            <img class="logo" src="${window.location.origin}/gov-logos.png" alt="Government Logos" />
+            <div>
+              <h2>${HOSPITAL_NAME}</h2>
+              <h1>${SYSTEM_NAME}</h1>
+            </div>
+          </div>
+
           <p>This result was issued during LIS downtime.</p>
+
           <div class="box">
             <p><span class="label">Barcode:</span> ${item.barcode}</p>
             <p><span class="label">MRN:</span> ${item.mrn}</p>
@@ -596,6 +603,7 @@ export default function App() {
             <p><span class="label">Source:</span> ${item.source}</p>
             <p><span class="label">Note:</span> ${item.note}</p>
           </div>
+
           <p class="note">Pending official LIS verification if not yet synchronized.</p>
         </body>
       </html>
@@ -668,14 +676,15 @@ export default function App() {
     return (
       <div style={loginPageStyle}>
         <div style={loginCardStyle}>
-          <div style={{ marginBottom: 12, fontSize: 14, color: "#475569", fontWeight: "bold" }}>
-            {HOSPITAL_NAME}
-          </div>
-          <div style={{ marginBottom: 24 }}>
-            <h1 style={{ margin: 0, fontSize: 34 }}>Zero Downtime Lab Portal</h1>
-            <p style={{ color: "#475569", marginTop: 10 }}>
-              Secure login for downtime result access during LIS maintenance.
-            </p>
+          <div style={loginHeaderStyle}>
+            <img src="/gov-logos.png" alt="Government Logos" style={loginLogoStyle} />
+            <div style={{ flex: 1 }}>
+              <div style={loginHospitalNameStyle}>{HOSPITAL_NAME}</div>
+              <h1 style={loginTitleStyle}>{SYSTEM_NAME}</h1>
+              <p style={loginSubtitleStyle}>
+                Secure login for downtime result access during LIS maintenance.
+              </p>
+            </div>
           </div>
 
           <div style={demoBoxStyle}>
@@ -716,71 +725,52 @@ export default function App() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#f8fafc",
-        padding: "24px",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      <div style={{ maxWidth: "1400px", margin: "0 auto" }}>
-        <div
-          style={{
-            background: "white",
-            border: "1px solid #e2e8f0",
-            borderRadius: "20px",
-            padding: "24px",
-            marginBottom: "24px",
-          }}
-        >
+    <div style={pageStyle}>
+      <div style={{ maxWidth: "1450px", margin: "0 auto" }}>
+        <div style={topBannerStyle}>
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
-              gap: "16px",
               alignItems: "center",
+              gap: "18px",
               flexWrap: "wrap",
             }}
           >
-            <div>
-              <div style={{ marginBottom: 8, fontSize: 14, color: "#475569", fontWeight: "bold" }}>
-                {HOSPITAL_NAME}
+            <div style={{ display: "flex", alignItems: "center", gap: "18px", flexWrap: "wrap" }}>
+              <div style={topLogoBoxStyle}>
+                <img src="/gov-logos.png" alt="Government Logos" style={topLogoStyle} />
               </div>
-              <h1 style={{ margin: 0, fontSize: "38px" }}>Zero Downtime Lab Portal</h1>
-              <p style={{ color: "#475569", marginTop: "10px" }}>
-                Internal hospital portal for viewing lab results during LIS downtime
-              </p>
-              <div style={{ marginTop: 10, color: "#0f172a", fontSize: 14 }}>
-                Logged in as <strong>{session.name}</strong> ({session.role})
+
+              <div>
+                <div style={topHospitalNameStyle}>{HOSPITAL_NAME}</div>
+                <h1 style={topSystemNameStyle}>{SYSTEM_NAME}</h1>
+                <div style={topSubTextStyle}>
+                  Secure temporary reporting and physician access during LIS downtime
+                </div>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <div
-                style={{
-                  background: "#fef2f2",
-                  color: "#b91c1c",
-                  border: "1px solid #fecaca",
-                  borderRadius: "14px",
-                  padding: "12px 16px",
-                  fontWeight: "bold",
-                }}
-              >
-                LIS Status: Scheduled Maintenance
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-end" }}>
+              <div style={statusPillStyle}>LIS Status: Scheduled Maintenance</div>
+              <div style={loggedUserStyle}>
+                Logged in as <strong>{session.name}</strong> ({session.role})
               </div>
-              <button onClick={handleExportCSV} style={smallButtonGreen}>Export CSV</button>
-              <button onClick={openImportDialog} style={smallButtonPurple}>Import CSV</button>
-              <button onClick={resetAllSavedData} style={smallButtonOrange}>Reset Saved Data</button>
-              <button onClick={handleLogout} style={smallButtonGray}>Logout</button>
-              <input
-                ref={importInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleImportCSV}
-                style={{ display: "none" }}
-              />
             </div>
+          </div>
+
+          <div style={headerButtonsRowStyle}>
+            <button onClick={handleExportCSV} style={smallButtonGreen}>Export CSV</button>
+            <button onClick={openImportDialog} style={smallButtonPurple}>Import CSV</button>
+            <button onClick={resetAllSavedData} style={smallButtonOrange}>Reset Saved Data</button>
+            <button onClick={handleLogout} style={smallButtonGray}>Logout</button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleImportCSV}
+              style={{ display: "none" }}
+            />
           </div>
         </div>
 
@@ -792,14 +782,7 @@ export default function App() {
           }}
         >
           {session.role === "Lab" && (
-            <div
-              style={{
-                background: "white",
-                border: "1px solid #e2e8f0",
-                borderRadius: "20px",
-                padding: "24px",
-              }}
-            >
+            <div style={panelStyle}>
               <h2 style={{ marginTop: 0 }}>Lab Entry</h2>
               <p style={{ color: "#64748b" }}>Choose manual entry or scanned result sheet.</p>
 
@@ -1073,10 +1056,10 @@ export default function App() {
                   </div>
 
                   <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-                    <button onClick={extractFromOCR} style={smallButtonBlue}>
+                    <button type="button" onClick={extractFromOCR} style={smallButtonBlue}>
                       Extract Results
                     </button>
-                    <button onClick={handleSaveScannedResult} style={buttonStyleInline}>
+                    <button type="button" onClick={handleSaveScannedResult} style={buttonStyleInline}>
                       Confirm & Save
                     </button>
                   </div>
@@ -1108,14 +1091,7 @@ export default function App() {
             </div>
           )}
 
-          <div
-            style={{
-              background: "white",
-              border: "1px solid #e2e8f0",
-              borderRadius: "20px",
-              padding: "24px",
-            }}
-          >
+          <div style={panelStyle}>
             <div
               style={{
                 display: "flex",
@@ -1263,15 +1239,7 @@ export default function App() {
               </table>
             </div>
 
-            <div
-              style={{
-                marginTop: "20px",
-                background: "#fff7ed",
-                border: "1px solid #fed7aa",
-                borderRadius: "16px",
-                padding: "16px",
-              }}
-            >
+            <div style={aiNoteStyle}>
               <strong>AI Safety Layer:</strong> results and downtime work are saved locally in the browser,
               can be exported to CSV, and re-imported while awaiting full system integration.
             </div>
@@ -1282,24 +1250,154 @@ export default function App() {
   );
 }
 
+const pageStyle = {
+  minHeight: "100vh",
+  background: "linear-gradient(180deg, #eef4fb 0%, #f8fafc 40%, #f8fafc 100%)",
+  padding: "24px",
+  fontFamily: "Arial, sans-serif",
+};
+
+const panelStyle = {
+  background: "rgba(255,255,255,0.97)",
+  border: "1px solid #dbe4f0",
+  borderRadius: "24px",
+  padding: "24px",
+  boxShadow: "0 10px 28px rgba(15, 23, 42, 0.06)",
+};
+
+const topBannerStyle = {
+  background: "linear-gradient(135deg, #0b1f3a 0%, #123a6b 60%, #1d4f91 100%)",
+  color: "white",
+  borderRadius: "26px",
+  padding: "22px 24px",
+  marginBottom: "24px",
+  boxShadow: "0 14px 36px rgba(15, 23, 42, 0.18)",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
+
+const topLogoBoxStyle = {
+  width: "180px",
+  minHeight: "82px",
+  borderRadius: "18px",
+  background: "rgba(255,255,255,0.12)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  overflow: "hidden",
+  border: "1px solid rgba(255,255,255,0.18)",
+  backdropFilter: "blur(6px)",
+  padding: "8px 12px",
+};
+
+const topLogoStyle = {
+  width: "100%",
+  maxHeight: "66px",
+  objectFit: "contain",
+};
+
+const topHospitalNameStyle = {
+  fontSize: "13px",
+  letterSpacing: "1px",
+  textTransform: "uppercase",
+  opacity: 0.82,
+  marginBottom: "6px",
+};
+
+const topSystemNameStyle = {
+  margin: 0,
+  fontSize: "34px",
+  lineHeight: 1.15,
+};
+
+const topSubTextStyle = {
+  marginTop: "8px",
+  fontSize: "14px",
+  opacity: 0.92,
+};
+
+const statusPillStyle = {
+  background: "rgba(220, 38, 38, 0.18)",
+  color: "#fee2e2",
+  border: "1px solid rgba(254, 202, 202, 0.35)",
+  padding: "10px 14px",
+  borderRadius: "999px",
+  fontWeight: "bold",
+  fontSize: "13px",
+};
+
+const loggedUserStyle = {
+  background: "rgba(255,255,255,0.1)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  padding: "8px 12px",
+  borderRadius: "14px",
+  fontSize: "13px",
+};
+
+const headerButtonsRowStyle = {
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  flexWrap: "wrap",
+  marginTop: 18,
+};
+
 const loginPageStyle = {
   minHeight: "100vh",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
+  background: "linear-gradient(180deg, #eef4fb 0%, #e2e8f0 100%)",
   padding: 24,
   fontFamily: "Arial, sans-serif",
 };
 
 const loginCardStyle = {
   width: "100%",
-  maxWidth: 480,
-  background: "white",
-  border: "1px solid #e2e8f0",
-  borderRadius: 24,
+  maxWidth: 560,
+  background: "rgba(255,255,255,0.98)",
+  border: "1px solid #dbe4f0",
+  borderRadius: 28,
   padding: 28,
-  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
+  boxShadow: "0 20px 50px rgba(15, 23, 42, 0.1)",
+};
+
+const loginHeaderStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 16,
+  marginBottom: 22,
+  flexWrap: "wrap",
+};
+
+const loginLogoStyle = {
+  width: 170,
+  maxHeight: 74,
+  objectFit: "contain",
+  borderRadius: 14,
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  padding: 8,
+};
+
+const loginHospitalNameStyle = {
+  fontSize: 13,
+  color: "#475569",
+  fontWeight: "bold",
+  textTransform: "uppercase",
+  letterSpacing: "0.8px",
+  marginBottom: 6,
+};
+
+const loginTitleStyle = {
+  margin: 0,
+  fontSize: 34,
+  color: "#0f172a",
+};
+
+const loginSubtitleStyle = {
+  color: "#475569",
+  marginTop: 10,
+  marginBottom: 0,
 };
 
 const demoBoxStyle = {
@@ -1427,10 +1525,11 @@ const inactiveTabStyle = {
 };
 
 const cardStyle = {
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
-  borderRadius: "16px",
-  padding: "16px",
+  background: "white",
+  border: "1px solid #dbe4f0",
+  borderRadius: "20px",
+  padding: "18px",
+  boxShadow: "0 6px 18px rgba(15, 23, 42, 0.05)",
 };
 
 const reviewCardStyle = {
@@ -1446,6 +1545,14 @@ const infoBoxStyle = {
   borderRadius: "12px",
   padding: "12px",
   marginBottom: "12px",
+};
+
+const aiNoteStyle = {
+  marginTop: "20px",
+  background: "#fff7ed",
+  border: "1px solid #fed7aa",
+  borderRadius: "16px",
+  padding: "16px",
 };
 
 const thStyle = {
