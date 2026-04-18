@@ -1813,10 +1813,19 @@ export default function App() {
               }}
             >
               <input
-                type="date"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                style={{ ...inputStyle, width: "220px", marginBottom: 0 }}
+  type="date"
+  lang="en"
+  dir="ltr"
+  value={dateFilter}
+  onChange={(e) => setDateFilter(e.target.value)}
+  style={{
+    ...inputStyle,
+    width: "220px",
+    marginBottom: 0,
+    direction: "ltr",
+    textAlign: "left",
+  }}
+/>
               />
 
               {dateFilter && (
