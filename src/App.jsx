@@ -13,8 +13,16 @@ const STORAGE_KEYS = {
 const HOSPITAL_NAME = "King Salman Armed Forces Hospital";
 const SYSTEM_NAME = "Zero Downtime Lab Portal";
 
+function createId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 const defaultResults = [
   {
+    id: "res-1",
     barcode: "LIS-001",
     mrn: "MRN-102344",
     patient: "Ahmed",
@@ -26,8 +34,10 @@ const defaultResults = [
     technician: "Fatimah",
     synced: false,
     source: "Manual Entry",
+    createdAt: "2026-04-18 10:32",
   },
   {
+    id: "res-2",
     barcode: "LIS-002",
     mrn: "MRN-102355",
     patient: "Sara",
@@ -39,6 +49,7 @@ const defaultResults = [
     technician: "Mona",
     synced: false,
     source: "Scanned Sheet",
+    createdAt: "2026-04-18 10:38",
   },
 ];
 
@@ -95,6 +106,7 @@ const defaultScanForm = {
   technician: "",
   fileName: "",
   filePreview: "",
+  fileType: "",
   ocrText: "",
 };
 
@@ -105,6 +117,26 @@ function safeRead(key, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function normalizeResults(data) {
+  if (!Array.isArray(data)) return defaultResults;
+
+  return data.map((item) => ({
+    id: item.id || createId(),
+    barcode: item.barcode || "",
+    mrn: item.mrn || "",
+    patient: item.patient || "",
+    test: item.test || "",
+    result: item.result || "",
+    status: item.status || "Normal",
+    time: item.time || "",
+    note: item.note || "",
+    technician: item.technician || "",
+    synced: !!item.synced,
+    source: item.source || "Manual Entry",
+    createdAt: item.createdAt || "",
+  }));
 }
 
 function parseCSVLine(line) {
@@ -133,11 +165,30 @@ function parseCSVLine(line) {
   return values;
 }
 
+function getNowTime() {
+  return new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getNowDateTime() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mi = String(now.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
 export default function App() {
   const [session, setSession] = useState(() => safeRead(STORAGE_KEYS.session, null));
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginError, setLoginError] = useState("");
-  const [results, setResults] = useState(() => safeRead(STORAGE_KEYS.results, defaultResults));
+  const [results, setResults] = useState(() =>
+    normalizeResults(safeRead(STORAGE_KEYS.results, defaultResults))
+  );
   const [search, setSearch] = useState("");
   const [entryMode, setEntryMode] = useState(() => safeRead(STORAGE_KEYS.entryMode, "manual"));
   const [form, setForm] = useState(() => safeRead(STORAGE_KEYS.form, defaultManualForm));
@@ -198,6 +249,14 @@ export default function App() {
     }
   }, [session]);
 
+  useEffect(() => {
+    return () => {
+      if (scanForm.filePreview) {
+        URL.revokeObjectURL(scanForm.filePreview);
+      }
+    };
+  }, [scanForm.filePreview]);
+
   function handleLogin(e) {
     e.preventDefault();
 
@@ -249,6 +308,10 @@ export default function App() {
     );
     if (!ok) return;
 
+    if (scanForm.filePreview) {
+      URL.revokeObjectURL(scanForm.filePreview);
+    }
+
     localStorage.removeItem(STORAGE_KEYS.results);
     localStorage.removeItem(STORAGE_KEYS.entryMode);
     localStorage.removeItem(STORAGE_KEYS.form);
@@ -280,6 +343,7 @@ export default function App() {
     }
 
     const headers = [
+      "ID",
       "Barcode",
       "MRN",
       "Patient",
@@ -289,11 +353,13 @@ export default function App() {
       "Synced",
       "Source",
       "Time",
+      "CreatedAt",
       "Technician",
       "Note",
     ];
 
     const rows = results.map((item) => [
+      item.id,
       item.barcode,
       item.mrn,
       item.patient,
@@ -303,6 +369,7 @@ export default function App() {
       item.synced ? "Yes" : "No",
       item.source,
       item.time,
+      item.createdAt,
       item.technician,
       item.note,
     ]);
@@ -352,6 +419,14 @@ export default function App() {
 
         const headers = parseCSVLine(lines[0]).map((h) => h.trim().toLowerCase());
 
+        const requiredHeaders = ["barcode", "mrn", "patient", "test", "result"];
+        const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
+
+        if (missingHeaders.length) {
+          alert(`Missing required columns: ${missingHeaders.join(", ")}`);
+          return;
+        }
+
         const importedRows = lines.slice(1).map((line) => {
           const cols = parseCSVLine(line);
 
@@ -361,6 +436,7 @@ export default function App() {
           });
 
           return {
+            id: row["id"] || createId(),
             barcode: row["barcode"] || "",
             mrn: row["mrn"] || "",
             patient: row["patient"] || "",
@@ -370,6 +446,7 @@ export default function App() {
             synced: String(row["synced"] || "").toLowerCase() === "yes",
             source: row["source"] || "Imported CSV",
             time: row["time"] || "",
+            createdAt: row["createdat"] || getNowDateTime(),
             technician: row["technician"] || "",
             note: row["note"] || "Imported from CSV",
           };
@@ -471,22 +548,19 @@ export default function App() {
     }
 
     const newResult = {
+      id: createId(),
       barcode: form.barcode,
       mrn: form.mrn,
       patient: form.patient,
       test: form.test,
       result: finalResult,
-      time:
-        form.time ||
-        new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+      time: form.time || getNowTime(),
       status,
       note: "Issued during LIS downtime",
       technician: form.technician,
       synced: false,
       source: "Manual Entry",
+      createdAt: getNowDateTime(),
     };
 
     setResults((prev) => [newResult, ...prev]);
@@ -549,12 +623,17 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (scanForm.filePreview) {
+      URL.revokeObjectURL(scanForm.filePreview);
+    }
+
     const previewUrl = URL.createObjectURL(file);
 
     setScanForm((prev) => ({
       ...prev,
       fileName: file.name,
       filePreview: previewUrl,
+      fileType: file.type,
     }));
   }
 
@@ -572,25 +651,26 @@ export default function App() {
     }
 
     const newResult = {
+      id: createId(),
       barcode: scanForm.barcode,
       mrn: scanForm.mrn,
       patient: scanForm.patient,
       test: scanForm.test,
       result: extractedData.result,
-      time:
-        scanForm.time ||
-        new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+      time: scanForm.time || getNowTime(),
       status: extractedData.status,
       note: "Extracted from scanned result sheet",
       technician: scanForm.technician,
       synced: false,
       source: "Scanned Sheet",
+      createdAt: getNowDateTime(),
     };
 
     setResults((prev) => [newResult, ...prev]);
+
+    if (scanForm.filePreview) {
+      URL.revokeObjectURL(scanForm.filePreview);
+    }
 
     setScanForm({
       ...defaultScanForm,
@@ -600,12 +680,12 @@ export default function App() {
     setExtractedData(null);
   }
 
-  function handleSync(index) {
+  function handleSync(id) {
     if (session?.role !== "Lab") return;
 
     setResults((prev) =>
-      prev.map((item, i) =>
-        i === index
+      prev.map((item) =>
+        item.id === id
           ? {
               ...item,
               synced: true,
@@ -652,6 +732,7 @@ export default function App() {
             <p><span class="label">Result:</span> ${item.result}</p>
             <p><span class="label">Status:</span> ${item.status}</p>
             <p><span class="label">Time:</span> ${item.time}</p>
+            <p><span class="label">Created At:</span> ${item.createdAt || "-"}</p>
             <p><span class="label">Technician:</span> ${item.technician}</p>
             <p><span class="label">Source:</span> ${item.source}</p>
             <p><span class="label">Note:</span> ${item.note}</p>
@@ -755,6 +836,7 @@ export default function App() {
           item.status,
           item.technician,
           item.source,
+          item.createdAt,
         ]
           .join(" ")
           .toLowerCase()
@@ -774,6 +856,7 @@ export default function App() {
         item.status,
         item.technician,
         item.source,
+        item.createdAt,
       ]
         .join(" ")
         .toLowerCase()
@@ -1263,7 +1346,12 @@ export default function App() {
 
                   <div style={{ marginBottom: "12px" }}>
                     <label>Upload Result Sheet</label>
-                    <input type="file" accept="image/*,.pdf" onChange={handleScanFileChange} style={inputStyle} />
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={handleScanFileChange}
+                      style={inputStyle}
+                    />
                   </div>
 
                   {scanForm.fileName && (
@@ -1275,18 +1363,33 @@ export default function App() {
                   {scanForm.filePreview && (
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ marginBottom: 8, fontWeight: "bold" }}>Preview</div>
-                      <img
-                        src={scanForm.filePreview}
-                        alt="Uploaded result sheet preview"
-                        style={{
-                          width: "100%",
-                          maxHeight: 220,
-                          objectFit: "contain",
-                          border: "1px solid #cbd5e1",
-                          borderRadius: 12,
-                          background: "#fff",
-                        }}
-                      />
+
+                      {scanForm.fileType === "application/pdf" ? (
+                        <iframe
+                          src={scanForm.filePreview}
+                          title="Uploaded PDF preview"
+                          style={{
+                            width: "100%",
+                            height: 320,
+                            border: "1px solid #cbd5e1",
+                            borderRadius: 12,
+                            background: "#fff",
+                          }}
+                        />
+                      ) : (
+                        <img
+                          src={scanForm.filePreview}
+                          alt="Uploaded result sheet preview"
+                          style={{
+                            width: "100%",
+                            maxHeight: 220,
+                            objectFit: "contain",
+                            border: "1px solid #cbd5e1",
+                            borderRadius: 12,
+                            background: "#fff",
+                          }}
+                        />
+                      )}
                     </div>
                   )}
 
@@ -1395,55 +1498,57 @@ export default function App() {
               />
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: "12px",
-                marginTop: "20px",
-                marginBottom: "20px",
-              }}
-            >
-              <div style={cardStyle}>
-                <div style={{ color: "#64748b", fontSize: "14px" }}>Results Entered</div>
-                <div style={{ fontSize: "28px", fontWeight: "bold", marginTop: "8px" }}>
-                  {results.length}
+            {session.role !== "Doctor" && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: "12px",
+                  marginTop: "20px",
+                  marginBottom: "20px",
+                }}
+              >
+                <div style={cardStyle}>
+                  <div style={{ color: "#64748b", fontSize: "14px" }}>Results Entered</div>
+                  <div style={{ fontSize: "28px", fontWeight: "bold", marginTop: "8px" }}>
+                    {results.length}
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ ...cardStyle, background: "#fef2f2", border: "1px solid #fecaca" }}>
-                <div style={{ color: "#b91c1c", fontSize: "14px" }}>Critical Alerts</div>
-                <div
-                  style={{
-                    fontSize: "28px",
-                    fontWeight: "bold",
-                    marginTop: "8px",
-                    color: "#b91c1c",
-                  }}
-                >
-                  {criticalCount}
+                <div style={{ ...cardStyle, background: "#fef2f2", border: "1px solid #fecaca" }}>
+                  <div style={{ color: "#b91c1c", fontSize: "14px" }}>Critical Alerts</div>
+                  <div
+                    style={{
+                      fontSize: "28px",
+                      fontWeight: "bold",
+                      marginTop: "8px",
+                      color: "#b91c1c",
+                    }}
+                  >
+                    {criticalCount}
+                  </div>
                 </div>
-              </div>
 
-              <div style={{ ...cardStyle, background: "#eff6ff", border: "1px solid #bfdbfe" }}>
-                <div style={{ color: "#1d4ed8", fontSize: "14px" }}>Pending Sync</div>
-                <div
-                  style={{
-                    fontSize: "28px",
-                    fontWeight: "bold",
-                    marginTop: "8px",
-                    color: "#1d4ed8",
-                  }}
-                >
-                  {pendingSyncCount}
+                <div style={{ ...cardStyle, background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+                  <div style={{ color: "#1d4ed8", fontSize: "14px" }}>Pending Sync</div>
+                  <div
+                    style={{
+                      fontSize: "28px",
+                      fontWeight: "bold",
+                      marginTop: "8px",
+                      color: "#1d4ed8",
+                    }}
+                  >
+                    {pendingSyncCount}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {session?.role === "Doctor" && !search.trim() && (
               <div
                 style={{
-                  marginTop: "8px",
+                  marginTop: "20px",
                   marginBottom: "16px",
                   background: "#fff7ed",
                   border: "1px solid #fed7aa",
@@ -1460,7 +1565,7 @@ export default function App() {
             {session?.role === "Doctor" && search.trim() && filteredResults.length === 0 && (
               <div
                 style={{
-                  marginTop: "8px",
+                  marginTop: "20px",
                   marginBottom: "16px",
                   background: "#f8fafc",
                   border: "1px solid #cbd5e1",
@@ -1475,7 +1580,7 @@ export default function App() {
             )}
 
             {session?.role === "Doctor" && !search.trim() ? null : (
-              <div style={{ overflowX: "auto" }}>
+              <div style={{ overflowX: "auto", marginTop: session.role === "Doctor" ? 20 : 0 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "#f8fafc" }}>
@@ -1488,14 +1593,15 @@ export default function App() {
                       <th style={thStyle}>Sync</th>
                       <th style={thStyle}>Source</th>
                       <th style={thStyle}>Time</th>
+                      <th style={thStyle}>Created At</th>
                       <th style={thStyle}>Technician</th>
                       <th style={thStyle}>Note</th>
                       <th style={thStyle}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredResults.map((item, index) => (
-                      <tr key={index}>
+                    {filteredResults.map((item) => (
+                      <tr key={item.id}>
                         <td style={tdStyle}>{item.barcode}</td>
                         <td style={tdStyle}>{item.mrn}</td>
                         <td style={tdStyle}>{item.patient}</td>
@@ -1531,12 +1637,13 @@ export default function App() {
                         </td>
                         <td style={tdStyle}>{item.source}</td>
                         <td style={tdStyle}>{item.time}</td>
+                        <td style={tdStyle}>{item.createdAt || "-"}</td>
                         <td style={tdStyle}>{item.technician}</td>
                         <td style={tdStyle}>{item.note}</td>
                         <td style={tdStyle}>
                           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                             {session.role === "Lab" && !item.synced && (
-                              <button style={smallButtonBlue} onClick={() => handleSync(index)}>
+                              <button style={smallButtonBlue} onClick={() => handleSync(item.id)}>
                                 Sync to LIS
                               </button>
                             )}
