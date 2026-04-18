@@ -190,6 +190,7 @@ export default function App() {
     normalizeResults(safeRead(STORAGE_KEYS.results, defaultResults))
   );
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [entryMode, setEntryMode] = useState(() => safeRead(STORAGE_KEYS.entryMode, "manual"));
   const [form, setForm] = useState(() => safeRead(STORAGE_KEYS.form, defaultManualForm));
   const [scanForm, setScanForm] = useState(() => safeRead(STORAGE_KEYS.scanForm, defaultScanForm));
@@ -204,6 +205,8 @@ export default function App() {
     username: "",
     password: "",
   });
+  const [editingResultId, setEditingResultId] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   const importInputRef = useRef(null);
 
@@ -236,6 +239,12 @@ export default function App() {
   }, [employees]);
 
   useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 3500);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
     if (session?.role === "Lab") {
       setForm((prev) => ({
         ...prev,
@@ -257,6 +266,10 @@ export default function App() {
     };
   }, [scanForm.filePreview]);
 
+  function showNotice(type, message) {
+    setNotice({ type, message });
+  }
+
   function handleLogin(e) {
     e.preventDefault();
 
@@ -274,6 +287,7 @@ export default function App() {
       setSession(fixedUser);
       setLoginError("");
       setSearch("");
+      showNotice("success", `Welcome, ${fixedUser.name}`);
       return;
     }
 
@@ -292,6 +306,7 @@ export default function App() {
     setSession(employee);
     setLoginError("");
     setSearch("");
+    showNotice("success", `Welcome, ${employee.name}`);
   }
 
   function handleLogout() {
@@ -299,6 +314,8 @@ export default function App() {
     setLoginForm({ username: "", password: "" });
     setLoginError("");
     setSearch("");
+    setStatusFilter("All");
+    setEditingResultId(null);
     localStorage.removeItem(STORAGE_KEYS.session);
   }
 
@@ -334,11 +351,14 @@ export default function App() {
     setEmployees(defaultEmployees);
     setEmployeeForm({ name: "", username: "", password: "" });
     setSearch("");
+    setStatusFilter("All");
+    setEditingResultId(null);
+    showNotice("success", "All saved browser data has been reset.");
   }
 
   function handleExportCSV() {
     if (!results.length) {
-      alert("No results available to export");
+      showNotice("warning", "No results available to export.");
       return;
     }
 
@@ -391,6 +411,7 @@ export default function App() {
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
+    showNotice("success", "CSV exported successfully.");
   }
 
   function openImportDialog() {
@@ -407,13 +428,13 @@ export default function App() {
       try {
         const text = String(event.target?.result || "").trim();
         if (!text) {
-          alert("The selected CSV file is empty");
+          showNotice("warning", "The selected CSV file is empty.");
           return;
         }
 
         const lines = text.split(/\r?\n/).filter(Boolean);
         if (lines.length < 2) {
-          alert("CSV file does not contain any result rows");
+          showNotice("warning", "CSV file does not contain any result rows.");
           return;
         }
 
@@ -423,7 +444,7 @@ export default function App() {
         const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
 
         if (missingHeaders.length) {
-          alert(`Missing required columns: ${missingHeaders.join(", ")}`);
+          showNotice("error", `Missing required columns: ${missingHeaders.join(", ")}`);
           return;
         }
 
@@ -457,7 +478,7 @@ export default function App() {
         );
 
         if (!validRows.length) {
-          alert("No valid rows found in the CSV file");
+          showNotice("warning", "No valid rows found in the CSV file.");
           return;
         }
 
@@ -471,9 +492,9 @@ export default function App() {
           setResults((prev) => [...validRows, ...prev]);
         }
 
-        alert(`Imported ${validRows.length} result(s) successfully.`);
+        showNotice("success", `Imported ${validRows.length} result(s) successfully.`);
       } catch {
-        alert("Failed to import CSV file");
+        showNotice("error", "Failed to import CSV file.");
       } finally {
         if (importInputRef.current) {
           importInputRef.current.value = "";
@@ -525,17 +546,17 @@ export default function App() {
     if (session?.role !== "Lab") return;
 
     if (!form.barcode || !form.mrn || !form.patient || !form.test || !form.technician) {
-      alert("Please fill all required fields");
+      showNotice("warning", "Please fill all required fields.");
       return;
     }
 
     if (form.test === "CBC") {
       if (!form.cbc.wbc || !form.cbc.rbc || !form.cbc.hb || !form.cbc.platelets) {
-        alert("Please fill all CBC fields");
+        showNotice("warning", "Please fill all CBC fields.");
         return;
       }
     } else if (!form.result) {
-      alert("Please enter the result");
+      showNotice("warning", "Please enter the result.");
       return;
     }
 
@@ -545,6 +566,35 @@ export default function App() {
 
     if (form.test === "CBC") {
       finalResult = `WBC: ${form.cbc.wbc} | RBC: ${form.cbc.rbc} | Hb: ${form.cbc.hb} | Platelets: ${form.cbc.platelets}`;
+    }
+
+    if (editingResultId) {
+      setResults((prev) =>
+        prev.map((item) =>
+          item.id === editingResultId
+            ? {
+                ...item,
+                barcode: form.barcode,
+                mrn: form.mrn,
+                patient: form.patient,
+                test: form.test,
+                result: finalResult,
+                time: form.time || item.time || getNowTime(),
+                status,
+                technician: form.technician,
+                source: "Manual Entry",
+              }
+            : item
+        )
+      );
+
+      setEditingResultId(null);
+      setForm({
+        ...defaultManualForm,
+        technician: session.name,
+      });
+      showNotice("success", "Manual result updated successfully.");
+      return;
     }
 
     const newResult = {
@@ -569,6 +619,8 @@ export default function App() {
       ...defaultManualForm,
       technician: session.name,
     });
+
+    showNotice("success", "Manual result saved successfully.");
   }
 
   function parseValue(text, label) {
@@ -579,7 +631,7 @@ export default function App() {
 
   function extractFromOCR() {
     if (!scanForm.ocrText.trim()) {
-      alert("Please paste OCR text first");
+      showNotice("warning", "Please paste OCR text first.");
       return;
     }
 
@@ -601,6 +653,7 @@ export default function App() {
         cbc,
         status,
       });
+      showNotice("success", "Results extracted from OCR text.");
       return;
     }
 
@@ -617,6 +670,7 @@ export default function App() {
       cbc: null,
       status,
     });
+    showNotice("success", "Results extracted from OCR text.");
   }
 
   function handleScanFileChange(e) {
@@ -635,18 +689,54 @@ export default function App() {
       filePreview: previewUrl,
       fileType: file.type,
     }));
+
+    showNotice("success", "Result sheet uploaded successfully.");
   }
 
   function handleSaveScannedResult() {
     if (session?.role !== "Lab") return;
 
     if (!scanForm.barcode || !scanForm.mrn || !scanForm.patient || !scanForm.test || !scanForm.technician) {
-      alert("Please fill all required fields");
+      showNotice("warning", "Please fill all required fields.");
       return;
     }
 
     if (!extractedData) {
-      alert("Please extract results first");
+      showNotice("warning", "Please extract results first.");
+      return;
+    }
+
+    if (editingResultId) {
+      setResults((prev) =>
+        prev.map((item) =>
+          item.id === editingResultId
+            ? {
+                ...item,
+                barcode: scanForm.barcode,
+                mrn: scanForm.mrn,
+                patient: scanForm.patient,
+                test: scanForm.test,
+                result: extractedData.result,
+                time: scanForm.time || item.time || getNowTime(),
+                status: extractedData.status,
+                technician: scanForm.technician,
+                source: "Scanned Sheet",
+              }
+            : item
+        )
+      );
+
+      if (scanForm.filePreview) {
+        URL.revokeObjectURL(scanForm.filePreview);
+      }
+
+      setScanForm({
+        ...defaultScanForm,
+        technician: session.name,
+      });
+      setExtractedData(null);
+      setEditingResultId(null);
+      showNotice("success", "Scanned result updated successfully.");
       return;
     }
 
@@ -678,6 +768,7 @@ export default function App() {
     });
 
     setExtractedData(null);
+    showNotice("success", "Scanned result saved successfully.");
   }
 
   function handleSync(id) {
@@ -694,6 +785,132 @@ export default function App() {
           : item
       )
     );
+
+    showNotice("success", "Result synchronized to LIS.");
+  }
+
+  function populateManualFormFromResult(item) {
+    const nextForm = {
+      barcode: item.barcode || "",
+      mrn: item.mrn || "",
+      patient: item.patient || "",
+      test: item.test || "CBC",
+      result: "",
+      cbc: {
+        wbc: "",
+        rbc: "",
+        hb: "",
+        platelets: "",
+      },
+      time: item.time || "",
+      technician: item.technician || session?.name || "",
+    };
+
+    if (item.test === "CBC") {
+      nextForm.cbc = {
+        wbc: parseValue(item.result || "", "WBC"),
+        rbc: parseValue(item.result || "", "RBC"),
+        hb: parseValue(item.result || "", "Hb"),
+        platelets: parseValue(item.result || "", "Platelets"),
+      };
+    } else {
+      nextForm.result = item.result || "";
+    }
+
+    setForm(nextForm);
+    setEntryMode("manual");
+  }
+
+  function populateScanFormFromResult(item) {
+    setScanForm({
+      ...defaultScanForm,
+      barcode: item.barcode || "",
+      mrn: item.mrn || "",
+      patient: item.patient || "",
+      test: item.test || "CBC",
+      time: item.time || "",
+      technician: item.technician || session?.name || "",
+      fileName: "",
+      filePreview: "",
+      fileType: "",
+      ocrText: "",
+    });
+
+    if (item.test === "CBC") {
+      const cbc = {
+        wbc: parseValue(item.result || "", "WBC"),
+        rbc: parseValue(item.result || "", "RBC"),
+        hb: parseValue(item.result || "", "Hb"),
+        platelets: parseValue(item.result || "", "Platelets"),
+      };
+
+      setExtractedData({
+        test: item.test,
+        result: item.result,
+        cbc,
+        status: item.status || getStatus("CBC", "", cbc),
+      });
+    } else {
+      setExtractedData({
+        test: item.test,
+        result: item.result,
+        cbc: null,
+        status: item.status || getStatus(item.test, item.result, null),
+      });
+    }
+
+    setEntryMode("scan");
+  }
+
+  function handleEditResult(item) {
+    if (session?.role !== "Lab") return;
+
+    setEditingResultId(item.id);
+
+    if (item.source === "Scanned Sheet") {
+      populateScanFormFromResult(item);
+    } else {
+      populateManualFormFromResult(item);
+    }
+
+    showNotice("success", `Editing result for ${item.patient || item.mrn}.`);
+  }
+
+  function cancelEdit() {
+    setEditingResultId(null);
+
+    if (scanForm.filePreview) {
+      URL.revokeObjectURL(scanForm.filePreview);
+    }
+
+    setForm({
+      ...defaultManualForm,
+      technician: session?.role === "Lab" ? session.name : "",
+    });
+    setScanForm({
+      ...defaultScanForm,
+      technician: session?.role === "Lab" ? session.name : "",
+    });
+    setExtractedData(null);
+    showNotice("warning", "Editing cancelled.");
+  }
+
+  function handleDeleteResult(id) {
+    if (session?.role !== "Lab" && session?.role !== "Admin") return;
+
+    const item = results.find((row) => row.id === id);
+    if (!item) return;
+
+    const ok = window.confirm(`Delete result for ${item.patient || item.mrn}?`);
+    if (!ok) return;
+
+    setResults((prev) => prev.filter((row) => row.id !== id));
+
+    if (editingResultId === id) {
+      cancelEdit();
+    }
+
+    showNotice("success", "Result deleted successfully.");
   }
 
   function handlePrint(item) {
@@ -756,7 +973,7 @@ export default function App() {
     const password = employeeForm.password.trim();
 
     if (!name || !username || !password) {
-      alert("Please fill all employee fields");
+      showNotice("warning", "Please fill all employee fields.");
       return;
     }
 
@@ -766,7 +983,7 @@ export default function App() {
     );
 
     if (usernameExistsInFixedUsers || usernameExistsInEmployees) {
-      alert("Username already exists");
+      showNotice("warning", "Username already exists.");
       return;
     }
 
@@ -781,6 +998,7 @@ export default function App() {
 
     setEmployees((prev) => [...prev, newEmployee]);
     setEmployeeForm({ name: "", username: "", password: "" });
+    showNotice("success", "Employee added successfully.");
   }
 
   function handleToggleEmployee(id) {
@@ -791,6 +1009,8 @@ export default function App() {
         emp.id === id ? { ...emp, active: !emp.active } : emp
       )
     );
+
+    showNotice("success", "Employee status updated.");
   }
 
   function handleDeleteEmployee(id) {
@@ -800,6 +1020,7 @@ export default function App() {
     if (!ok) return;
 
     setEmployees((prev) => prev.filter((emp) => emp.id !== id));
+    showNotice("success", "Employee deleted successfully.");
   }
 
   function handleResetEmployeePassword(id) {
@@ -813,56 +1034,45 @@ export default function App() {
         emp.id === id ? { ...emp, password: newPassword } : emp
       )
     );
+
+    showNotice("success", "Employee password reset successfully.");
   }
 
   const filteredResults = useMemo(() => {
     const q = search.toLowerCase().trim();
 
+    let base = results;
+
     if (session?.role === "Doctor") {
       if (!q) return [];
-      return results.filter((item) => item.mrn.toLowerCase().includes(q));
+      base = results.filter((item) => item.mrn.toLowerCase().includes(q));
+    } else {
+      if (q) {
+        base = results.filter((item) =>
+          [
+            item.barcode,
+            item.mrn,
+            item.patient,
+            item.test,
+            item.result,
+            item.status,
+            item.technician,
+            item.source,
+            item.createdAt,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(q)
+        );
+      }
     }
 
-    if (session?.role === "Admin") {
-      if (!q) return results;
-
-      return results.filter((item) =>
-        [
-          item.barcode,
-          item.mrn,
-          item.patient,
-          item.test,
-          item.result,
-          item.status,
-          item.technician,
-          item.source,
-          item.createdAt,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(q)
-      );
+    if (statusFilter !== "All") {
+      base = base.filter((item) => item.status === statusFilter);
     }
 
-    if (!q) return results;
-
-    return results.filter((item) =>
-      [
-        item.barcode,
-        item.mrn,
-        item.patient,
-        item.test,
-        item.result,
-        item.status,
-        item.technician,
-        item.source,
-        item.createdAt,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [results, search, session]);
+    return base;
+  }, [results, search, statusFilter, session]);
 
   const criticalCount = results.filter((r) => r.status === "Critical").length;
   const pendingSyncCount = results.filter((r) => !r.synced).length;
@@ -901,6 +1111,30 @@ export default function App() {
           color: "#c2410c",
           border: "1px solid #fed7aa",
         };
+  }
+
+  function noticeStyle(type) {
+    if (type === "success") {
+      return {
+        background: "#ecfdf5",
+        border: "1px solid #a7f3d0",
+        color: "#065f46",
+      };
+    }
+
+    if (type === "warning") {
+      return {
+        background: "#fff7ed",
+        border: "1px solid #fed7aa",
+        color: "#9a3412",
+      };
+    }
+
+    return {
+      background: "#fef2f2",
+      border: "1px solid #fecaca",
+      color: "#b91c1c",
+    };
   }
 
   if (!session) {
@@ -1005,6 +1239,20 @@ export default function App() {
             />
           </div>
         </div>
+
+        {notice && (
+          <div
+            style={{
+              ...noticeStyle(notice.type),
+              borderRadius: 16,
+              padding: "14px 16px",
+              marginBottom: 20,
+              fontWeight: "bold",
+            }}
+          >
+            {notice.message}
+          </div>
+        )}
 
         <div
           style={{
@@ -1131,10 +1379,16 @@ export default function App() {
 
           {session.role === "Lab" && (
             <div style={panelStyle}>
-              <h2 style={{ marginTop: 0 }}>Lab Entry</h2>
-              <p style={{ color: "#64748b" }}>Choose manual entry or scanned result sheet.</p>
+              <h2 style={{ marginTop: 0 }}>
+                {editingResultId ? "Edit Result" : "Lab Entry"}
+              </h2>
+              <p style={{ color: "#64748b" }}>
+                {editingResultId
+                  ? "Update the selected result and save changes."
+                  : "Choose manual entry or scanned result sheet."}
+              </p>
 
-              <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+              <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
                 <button
                   onClick={() => setEntryMode("manual")}
                   style={entryMode === "manual" ? activeTabStyle : inactiveTabStyle}
@@ -1147,6 +1401,11 @@ export default function App() {
                 >
                   Scan Result Sheet
                 </button>
+                {editingResultId && (
+                  <button onClick={cancelEdit} style={smallButtonOrange}>
+                    Cancel Edit
+                  </button>
+                )}
               </div>
 
               {entryMode === "manual" ? (
@@ -1292,7 +1551,7 @@ export default function App() {
                   </div>
 
                   <button type="submit" style={buttonStyle}>
-                    Save Manual Result
+                    {editingResultId ? "Update Manual Result" : "Save Manual Result"}
                   </button>
                 </form>
               ) : (
@@ -1428,7 +1687,7 @@ export default function App() {
                       Extract Results
                     </button>
                     <button type="button" onClick={handleSaveScannedResult} style={buttonStyleInline}>
-                      Confirm & Save
+                      {editingResultId ? "Update Scanned Result" : "Confirm & Save"}
                     </button>
                   </div>
 
@@ -1496,6 +1755,28 @@ export default function App() {
                     : "Search by barcode, MRN, patient..."
                 }
               />
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                flexWrap: "wrap",
+                marginTop: 16,
+                marginBottom: session.role !== "Doctor" ? 0 : 4,
+              }}
+            >
+              <div style={{ fontWeight: "bold", color: "#334155" }}>Filter by Status:</div>
+              {["All", "Critical", "Review", "Normal"].map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setStatusFilter(status)}
+                  style={statusFilter === status ? activeTabStyle : inactiveTabStyle}
+                >
+                  {status}
+                </button>
+              ))}
             </div>
 
             {session.role !== "Doctor" && (
@@ -1575,7 +1856,7 @@ export default function App() {
                   fontWeight: "bold",
                 }}
               >
-                No results found for this MRN.
+                No results found for this MRN and selected status filter.
               </div>
             )}
 
@@ -1647,6 +1928,19 @@ export default function App() {
                                 Sync to LIS
                               </button>
                             )}
+
+                            {session.role === "Lab" && (
+                              <button style={smallButtonPurple} onClick={() => handleEditResult(item)}>
+                                Edit
+                              </button>
+                            )}
+
+                            {(session.role === "Lab" || session.role === "Admin") && (
+                              <button style={smallButtonOrange} onClick={() => handleDeleteResult(item.id)}>
+                                Delete
+                              </button>
+                            )}
+
                             <button style={smallButtonGray} onClick={() => handlePrint(item)}>
                               Print
                             </button>
