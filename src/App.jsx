@@ -182,6 +182,16 @@ function getNowDateTime() {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
 }
 
+function extractDateOnly(value) {
+  if (!value) return "";
+  return String(value).split(" ")[0];
+}
+
+function formatPercent(value, total) {
+  if (!total) return "0%";
+  return `${Math.round((value / total) * 100)}%`;
+}
+
 export default function App() {
   const [session, setSession] = useState(() => safeRead(STORAGE_KEYS.session, null));
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
@@ -191,6 +201,10 @@ export default function App() {
   );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
+
   const [entryMode, setEntryMode] = useState(() => safeRead(STORAGE_KEYS.entryMode, "manual"));
   const [form, setForm] = useState(() => safeRead(STORAGE_KEYS.form, defaultManualForm));
   const [scanForm, setScanForm] = useState(() => safeRead(STORAGE_KEYS.scanForm, defaultScanForm));
@@ -243,6 +257,10 @@ export default function App() {
     const timer = setTimeout(() => setNotice(null), 3500);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, dateFilter]);
 
   useEffect(() => {
     if (session?.role === "Lab") {
@@ -315,6 +333,8 @@ export default function App() {
     setLoginError("");
     setSearch("");
     setStatusFilter("All");
+    setDateFilter("");
+    setCurrentPage(1);
     setEditingResultId(null);
     localStorage.removeItem(STORAGE_KEYS.session);
   }
@@ -352,6 +372,8 @@ export default function App() {
     setEmployeeForm({ name: "", username: "", password: "" });
     setSearch("");
     setStatusFilter("All");
+    setDateFilter("");
+    setCurrentPage(1);
     setEditingResultId(null);
     showNotice("success", "All saved browser data has been reset.");
   }
@@ -1046,36 +1068,60 @@ export default function App() {
     if (session?.role === "Doctor") {
       if (!q) return [];
       base = results.filter((item) => item.mrn.toLowerCase().includes(q));
-    } else {
-      if (q) {
-        base = results.filter((item) =>
-          [
-            item.barcode,
-            item.mrn,
-            item.patient,
-            item.test,
-            item.result,
-            item.status,
-            item.technician,
-            item.source,
-            item.createdAt,
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(q)
-        );
-      }
+    } else if (q) {
+      base = results.filter((item) =>
+        [
+          item.barcode,
+          item.mrn,
+          item.patient,
+          item.test,
+          item.result,
+          item.status,
+          item.technician,
+          item.source,
+          item.createdAt,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
+      );
     }
 
     if (statusFilter !== "All") {
       base = base.filter((item) => item.status === statusFilter);
     }
 
+    if (dateFilter) {
+      base = base.filter((item) => extractDateOnly(item.createdAt) === dateFilter);
+    }
+
     return base;
-  }, [results, search, statusFilter, session]);
+  }, [results, search, statusFilter, dateFilter, session]);
 
   const criticalCount = results.filter((r) => r.status === "Critical").length;
+  const reviewCount = results.filter((r) => r.status === "Review").length;
+  const normalCount = results.filter((r) => r.status === "Normal").length;
   const pendingSyncCount = results.filter((r) => !r.synced).length;
+
+  const totalPages = Math.max(1, Math.ceil(filteredResults.length / pageSize));
+  const paginatedResults = filteredResults.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
+  const chartData = [
+    { label: "Critical", value: criticalCount, color: "#dc2626" },
+    { label: "Review", value: reviewCount, color: "#d97706" },
+    { label: "Normal", value: normalCount, color: "#16a34a" },
+  ];
+
+  const testDistribution = useMemo(() => {
+    const counts = {};
+    results.forEach((item) => {
+      counts[item.test] = (counts[item.test] || 0) + 1;
+    });
+    return Object.entries(counts).map(([label, value]) => ({ label, value }));
+  }, [results]);
 
   function badgeStyle(status) {
     if (status === "Critical") {
@@ -1763,6 +1809,29 @@ export default function App() {
                 gap: 10,
                 alignItems: "center",
                 flexWrap: "wrap",
+                marginTop: 12,
+              }}
+            >
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                style={{ ...inputStyle, width: "220px", marginBottom: 0 }}
+              />
+
+              {dateFilter && (
+                <button onClick={() => setDateFilter("")} style={smallButtonGray}>
+                  Clear Date
+                </button>
+              )}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                flexWrap: "wrap",
                 marginTop: 16,
                 marginBottom: session.role !== "Doctor" ? 0 : 4,
               }}
@@ -1780,50 +1849,147 @@ export default function App() {
             </div>
 
             {session.role !== "Doctor" && (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: "12px",
-                  marginTop: "20px",
-                  marginBottom: "20px",
-                }}
-              >
-                <div style={cardStyle}>
-                  <div style={{ color: "#64748b", fontSize: "14px" }}>Results Entered</div>
-                  <div style={{ fontSize: "28px", fontWeight: "bold", marginTop: "8px" }}>
-                    {results.length}
+              <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: "12px",
+                    marginTop: "20px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <div style={cardStyle}>
+                    <div style={{ color: "#64748b", fontSize: "14px" }}>Results Entered</div>
+                    <div style={{ fontSize: "28px", fontWeight: "bold", marginTop: "8px" }}>
+                      {results.length}
+                    </div>
+                  </div>
+
+                  <div style={{ ...cardStyle, background: "#fef2f2", border: "1px solid #fecaca" }}>
+                    <div style={{ color: "#b91c1c", fontSize: "14px" }}>Critical Alerts</div>
+                    <div
+                      style={{
+                        fontSize: "28px",
+                        fontWeight: "bold",
+                        marginTop: "8px",
+                        color: "#b91c1c",
+                      }}
+                    >
+                      {criticalCount}
+                    </div>
+                  </div>
+
+                  <div style={{ ...cardStyle, background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+                    <div style={{ color: "#1d4ed8", fontSize: "14px" }}>Pending Sync</div>
+                    <div
+                      style={{
+                        fontSize: "28px",
+                        fontWeight: "bold",
+                        marginTop: "8px",
+                        color: "#1d4ed8",
+                      }}
+                    >
+                      {pendingSyncCount}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ ...cardStyle, background: "#fef2f2", border: "1px solid #fecaca" }}>
-                  <div style={{ color: "#b91c1c", fontSize: "14px" }}>Critical Alerts</div>
-                  <div
-                    style={{
-                      fontSize: "28px",
-                      fontWeight: "bold",
-                      marginTop: "8px",
-                      color: "#b91c1c",
-                    }}
-                  >
-                    {criticalCount}
-                  </div>
-                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                    gap: "16px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <div style={cardStyle}>
+                    <div style={{ fontWeight: "bold", marginBottom: 14 }}>Status Distribution</div>
 
-                <div style={{ ...cardStyle, background: "#eff6ff", border: "1px solid #bfdbfe" }}>
-                  <div style={{ color: "#1d4ed8", fontSize: "14px" }}>Pending Sync</div>
-                  <div
-                    style={{
-                      fontSize: "28px",
-                      fontWeight: "bold",
-                      marginTop: "8px",
-                      color: "#1d4ed8",
-                    }}
-                  >
-                    {pendingSyncCount}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {chartData.map((item) => (
+                        <div key={item.label}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              marginBottom: 6,
+                              fontSize: 14,
+                              fontWeight: "bold",
+                            }}
+                          >
+                            <span>{item.label}</span>
+                            <span>{item.value} ({formatPercent(item.value, results.length)})</span>
+                          </div>
+
+                          <div
+                            style={{
+                              height: 12,
+                              background: "#e2e8f0",
+                              borderRadius: 999,
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: formatPercent(item.value, results.length),
+                                height: "100%",
+                                background: item.color,
+                                borderRadius: 999,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={cardStyle}>
+                    <div style={{ fontWeight: "bold", marginBottom: 14 }}>Test Distribution</div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {testDistribution.length === 0 ? (
+                        <div style={{ color: "#64748b" }}>No data available.</div>
+                      ) : (
+                        testDistribution.map((item) => (
+                          <div key={item.label}>
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                marginBottom: 6,
+                                fontSize: 14,
+                                fontWeight: "bold",
+                              }}
+                            >
+                              <span>{item.label}</span>
+                              <span>{item.value}</span>
+                            </div>
+
+                            <div
+                              style={{
+                                height: 12,
+                                background: "#e2e8f0",
+                                borderRadius: 999,
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: formatPercent(item.value, results.length),
+                                  height: "100%",
+                                  background: "#2563eb",
+                                  borderRadius: 999,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              </>
             )}
 
             {session?.role === "Doctor" && !search.trim() && (
@@ -1856,7 +2022,7 @@ export default function App() {
                   fontWeight: "bold",
                 }}
               >
-                No results found for this MRN and selected status filter.
+                No results found for this MRN and selected filters.
               </div>
             )}
 
@@ -1881,7 +2047,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredResults.map((item) => (
+                    {paginatedResults.map((item) => (
                       <tr key={item.id}>
                         <td style={tdStyle}>{item.barcode}</td>
                         <td style={tdStyle}>{item.mrn}</td>
@@ -1950,6 +2116,63 @@ export default function App() {
                     ))}
                   </tbody>
                 </table>
+
+                {filteredResults.length > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      marginTop: 16,
+                    }}
+                  >
+                    <div style={{ color: "#475569", fontWeight: "bold" }}>
+                      Showing {(currentPage - 1) * pageSize + 1} -{" "}
+                      {Math.min(currentPage * pageSize, filteredResults.length)} of {filteredResults.length}
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        style={{
+                          ...smallButtonGray,
+                          opacity: currentPage === 1 ? 0.5 : 1,
+                          cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        Previous
+                      </button>
+
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          background: "#f8fafc",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: 10,
+                          fontWeight: "bold",
+                          color: "#334155",
+                        }}
+                      >
+                        Page {currentPage} / {totalPages}
+                      </div>
+
+                      <button
+                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        style={{
+                          ...smallButtonGray,
+                          opacity: currentPage === totalPages ? 0.5 : 1,
+                          cursor: currentPage === totalPages ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
