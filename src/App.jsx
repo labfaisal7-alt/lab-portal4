@@ -25,6 +25,7 @@ const defaultResults = [
     id: "res-1",
     barcode: "LIS-001",
     mrn: "MRN-102344",
+    department: "Emergency",
     patient: "Ahmed",
     test: "Potassium",
     result: "6.5",
@@ -40,6 +41,7 @@ const defaultResults = [
     id: "res-2",
     barcode: "LIS-002",
     mrn: "MRN-102355",
+    department: "ICU",
     patient: "Sara",
     test: "CBC",
     result: "WBC: 8.5 | RBC: 4.7 | Hb: 13.2 | Platelets: 220",
@@ -84,6 +86,7 @@ const defaultEmployees = [
 const defaultManualForm = {
   barcode: "",
   mrn: "",
+  department: "",
   patient: "",
   test: "CBC",
   result: "",
@@ -95,6 +98,3 @@ const defaultManualForm = {
   },
   time: "",
   technician: "",
-};
-
-const defaultScanForm = {
